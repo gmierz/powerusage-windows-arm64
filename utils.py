@@ -30,3 +30,18 @@ def joules_to_milliwatts(energy_consumed, time_in_seconds):
 
 def joules_to_milliwatthours(energy_in_joules):
 	return energy_in_joules/3.6
+
+
+def get_ordered_datalist(datadict):
+    # Data must have already been merged!
+    sorted_list = []
+    for key in sorted(datadict, key=datadict.get):
+        newval = [key]
+        if type(datadict[key]) not in (list,):
+        	newval.append(datadict[key])
+        else:
+        	newval.extend(datadict[key])
+        sorted_list.append(newval)
+
+    return sorted_list
+
