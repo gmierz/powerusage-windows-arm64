@@ -5,8 +5,7 @@ import datetime
 from utils import (
     pattern_find,
     get_paths_from_dir,
-    millijoules_to_joules,
-    joules_to_milliwatthours
+    millijoules_to_milliwatts
 )
 
 
@@ -71,14 +70,14 @@ def merge_srum_rows(datadict):
     return merged_dict
 
 
-def convert_data_to_milliwatthours(datadict):
+def convert_data_to_milliwatts(datadict, total_time):
     new_data = {}
     for time, data in datadict.items():
         new_data[time] = []
         for val in data:
             new_data[time].append(
-                joules_to_milliwatthours(
-                    millijoules_to_joules(val)
+                millijoules_to_milliwatts(
+                    val, total_time
                 )
             )
     return new_data
@@ -89,7 +88,7 @@ def get_srumutil_files(datadir):
     return files
 
 
-def open_srumutil_data(testdir, application, excluded_apps, teststarttime):
+def open_srumutil_data(testdir, application, excluded_apps, teststarttim, dist_between_samples):
     files = get_srumutil_files(testdir)
 
     currdata = {}
@@ -100,14 +99,15 @@ def open_srumutil_data(testdir, application, excluded_apps, teststarttime):
             if str(row[2]) not in currdata:
                 currdata[str(row[2])] = []
             currdata[str(row[2])].append([int(x.lstrip(' ')) for x in row[13:]])
-        #print(currdata[str(row[2])])
+            if currdata[str(row[2])][-1][-1] > 1000000:
+                currdata[str(row[2])] = currdata[str(row[2])][:-1]
 
     print(currdata.keys())
     print("Total datapoints found: %s" % len(list(currdata.keys())))
 
-    header = ['timestamp'] + header[12:]
+    header = ['timestamp'] + [x.lstrip(' ') for x in header[12:]]
     merged_data = merge_srum_rows(currdata)
-    fmt_data = convert_data_to_milliwatthours(merged_data)
+    fmt_data = convert_data_to_milliwatts(merged_data, dist_between_samples)
 
     return header, fmt_data
 

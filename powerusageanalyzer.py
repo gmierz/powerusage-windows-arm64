@@ -7,6 +7,8 @@ from powerusageparser import open_srumutil_data
 from batteryusageparser import open_battery_reports
 from utils import get_ordered_datalist
 
+DIST_BETWEEN_SAMPLES = 60
+
 
 def analysisparser():
 	parser = argparse.ArgumentParser(
@@ -103,14 +105,16 @@ def compare_data(baselinedir, testdir, config, args):
 		baselinedir,
 		args['baseline_application'],
 		args['exclude_baseline_apps'],
-		config['starttime']
+		config['starttime'],
+		DIST_BETWEEN_SAMPLES
 	)
 	print("Getting SRUMUTIL testing data...")
 	_, testdata = open_srumutil_data(
 		testdir,
 		args['application'],
 		args['exclude_test_apps'],
-		config['teststarttime']
+		config['teststarttime'],
+		DIST_BETWEEN_SAMPLES
 	)
 
 	print("Getting battery reports for baseline...")
@@ -130,8 +134,8 @@ def compare_data(baselinedir, testdir, config, args):
 	deltas_baseline = get_battery_deltas(ord_baseline)
 	deltas_test = get_battery_deltas(ord_test, timewindow=60)
 
-	avg_baseline_battery = sum(deltas_baseline)/len(deltas_baseline)
-	avg_test_battery = sum(deltas_test)/len(deltas_test)
+	avg_baseline_battery = (ord_baseline[0] - ord_baseline[-1])/600
+	avg_test_battery = (ord_test[0] - ord_test[-1])/600
 
 	# Conduct power usage analysis
 	ord_baseline = get_ordered_datalist(baselinedata)

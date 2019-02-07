@@ -23,6 +23,9 @@ def get_paths_from_dir(source_dir, file_matchers=None):
 def millijoules_to_joules(val):
 	return val/1000
 
+def millijoules_to_milliwatts(energy_consumed, time_in_seconds):
+	return energy_consumed/time_in_seconds
+
 
 def joules_to_milliwatts(energy_consumed, time_in_seconds):
 	return energy_consumed/time_in_seconds
