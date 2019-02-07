@@ -23,16 +23,17 @@ def get_paths_from_dir(source_dir, file_matchers=None):
 def millijoules_to_joules(val):
 	return val/1000
 
+
 def millijoules_to_milliwatts(energy_consumed, time_in_seconds):
 	return energy_consumed/time_in_seconds
 
 
-def joules_to_milliwatts(energy_consumed, time_in_seconds):
+def joules_to_watts(energy_consumed, time_in_seconds):
 	return energy_consumed/time_in_seconds
 
 
-def joules_to_milliwatthours(energy_in_joules):
-	return energy_in_joules/3.6
+def milliwatthours_to_millijoules(energy_consumed):
+	return energy_consumed*3600
 
 
 def get_ordered_datalist(datadict):
@@ -46,5 +47,5 @@ def get_ordered_datalist(datadict):
         	newval.extend(datadict[key])
         sorted_list.append(newval)
 
-    return sorted_list
+    return sorted_list[::-1]
 

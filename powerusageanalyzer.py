@@ -3,9 +3,15 @@ import os
 import time
 import json
 
+from matplotlib import pyplot as plt
+
 from powerusageparser import open_srumutil_data
 from batteryusageparser import open_battery_reports
-from utils import get_ordered_datalist
+from utils import (
+	get_ordered_datalist,
+	milliwatthours_to_millijoules,
+	millijoules_to_milliwatts
+)
 
 DIST_BETWEEN_SAMPLES = 60
 
@@ -22,6 +28,9 @@ def analysisparser():
 
 	parser.add_argument('--baseline-data', type=str, default=None,
 						help='Sets the baseline data directory. Ignored if --data is specified.')
+
+	parser.add_argument('--baseline-time', type=int, default=None,
+						help='Length of baseline in seconds, default is obtained from the config.')
 
 	parser.add_argument('--test-data', type=str, default=None,
 						help='Sets the test data directory. Ignored if --data is specified.')
@@ -80,10 +89,10 @@ def get_avg_consumption_rate(ordered_datalist):
 	consumption = []
 	for row in ordered_datalist:
 		consumption.append([
-			x/60 for x in row
+			x for x in row
 		])
 
-	avg_consumption = [sum(x)/len(x) for x in zip(*consumption)]
+	avg_consumption = [sum(x)/len(consumption) for x in zip(*consumption)]
 	return avg_consumption
 
 
@@ -92,7 +101,10 @@ def get_battery_deltas(ordered_datalist, timewindow=60):
 	for i in range(len(ordered_datalist)):
 		if i >= len(ordered_datalist) - 1:
 			continue
-		deltas.append((ordered_datalist[i]-ordered_datalist[i+1])/timewindow)
+		deltas.append(millijoules_to_milliwatts(
+			milliwatthours_to_millijoules((ordered_datalist[i]-ordered_datalist[i+1])),
+			timewindow
+		))
 	return deltas
 
 
@@ -128,15 +140,53 @@ def compare_data(baselinedir, testdir, config, args):
 	ord_baseline_battery = get_ordered_datalist(baseline_reports)
 	ord_test_battery = get_ordered_datalist(test_reports)
 
-	ord_baseline = [r[1] for r in ord_baseline_battery]
-	ord_test = [r[1] for r in ord_test_battery]
+	ord_baseline = [float(r[1]) for r in ord_baseline_battery]
+	ord_test = [float(r[1]) for r in ord_test_battery]
+	print(ord_baseline)
 
-	deltas_baseline = get_battery_deltas(ord_baseline)
-	deltas_test = get_battery_deltas(ord_test, timewindow=60)
+	N = 15
+	cumsum, moving_aves = [0], []
 
-	avg_baseline_battery = (ord_baseline[0] - ord_baseline[-1])/600
-	avg_test_battery = (ord_test[0] - ord_test[-1])/600
+	for i, x in enumerate(ord_baseline, 1):
+	    cumsum.append(cumsum[i-1] + x)
+	    if i>=N:
+	        moving_ave = (cumsum[i] - cumsum[i-N])/N
+	        #can do stuff with moving_ave here
+	        moving_aves.append(moving_ave)
+	ord_baseline = moving_aves
 
+	deltas_base = get_battery_deltas(ord_baseline, timewindow=60)
+
+	N = 15
+	cumsum, moving_aves = [0], []
+
+	for i, x in enumerate(deltas_base, 1):
+	    cumsum.append(cumsum[i-1] + x)
+	    if i>=N:
+	        moving_ave = (cumsum[i] - cumsum[i-N])/N
+	        #can do stuff with moving_ave here
+	        moving_aves.append(moving_ave)
+	deltas_base = moving_aves
+
+	plt.figure()
+	plt.plot(ord_baseline)
+	plt.show()
+	plt.figure()
+	plt.plot(deltas_base)
+	plt.show()
+	avg_baseline_battery = sum(deltas_base)/len(ord_baseline)
+	avg_test_battery = sum(get_battery_deltas(ord_test, timewindow=60))/len(ord_test)
+
+	'''
+	avg_baseline_battery = abs(millijoules_to_milliwatts(
+		milliwatthours_to_millijoules((ord_baseline[0] - ord_baseline[-1])),
+		args['baseline_time']
+	))
+	avg_test_battery = abs(millijoules_to_milliwatts(
+		milliwatthours_to_millijoules((ord_test[0] - ord_test[-1])),
+		600
+	))
+	'''
 	# Conduct power usage analysis
 	ord_baseline = get_ordered_datalist(baselinedata)
 	ord_baseline = [r[1:] for r in ord_baseline]
@@ -193,6 +243,10 @@ def compare_against_baseline(args):
 
 	with open(configfile, 'r') as f:
 		config = json.load(f)
+
+	if not args['baseline_time']:
+		args['baseline_time'] = config['teststarttime'] - config['starttime']
+		print("Baseline time in seconds: %s" % str(args['baseline_time']))
 
 	print("Results will be stored in %s" % resultsdir)
 	if not os.path.exists(resultsdir):

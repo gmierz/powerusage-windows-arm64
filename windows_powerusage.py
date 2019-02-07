@@ -11,63 +11,6 @@ import ctypes
 from threading import Thread, Event
 
 
-'''
-Admin rights are required to run powercfg from python. Use runAsAdmin(...) in case it is not.
-Check for admin priviledges with isUserAdmin(...).
-'''
-def isUserAdmin():
-    if os.name == 'nt':
-        import ctypes
-        try:
-            return ctypes.windll.shell32.IsUserAnAdmin()
-        except:
-            traceback.print_exc()
-            print "Admin check failed, assuming not an admin."
-            return False
-    elif os.name == 'posix':
-        # Check for root on Posix
-        return os.getuid() == 0
-    else:
-        raise RuntimeError, "Unsupported operating system for this module: %s" % (os.name,)
-
-
-def runAsAdmin(cmdLine=None, wait=True):
-    if os.name != 'nt':
-        raise RuntimeError, "This function is only implemented on Windows."
-
-    import win32api, win32con, win32event, win32process
-    from win32com.shell.shell import ShellExecuteEx
-    from win32com.shell import shellcon
-
-    python_exe = sys.executable
-
-    if cmdLine is None:
-        cmdLine = [python_exe] + sys.argv
-    elif type(cmdLine) not in (types.TupleType,types.ListType):
-        raise ValueError, "cmdLine is not a sequence."
-    cmd = '"%s"' % (cmdLine[0],)
-    params = " ".join(['"%s"' % (x,) for x in cmdLine[1:]])
-    cmdDir = ''
-    showCmd = win32con.SW_SHOWNORMAL
-    lpVerb = 'runas'  # causes UAC elevation prompt.
-
-    procInfo = ShellExecuteEx(nShow=showCmd,
-                              fMask=shellcon.SEE_MASK_NOCLOSEPROCESS,
-                              lpVerb=lpVerb,
-                              lpFile=cmd,
-                              lpParameters=params)
-
-    if wait:
-        procHandle = procInfo['hProcess']    
-        obj = win32event.WaitForSingleObject(procHandle, win32event.INFINITE)
-        rc = win32process.GetExitCodeProcess(procHandle)
-        #print "Process handle %s returned code %s" % (procHandle, rc)
-    else:
-        rc = None
-
-    return rc
-
-
 class disable_file_system_redirection:
     '''
     File System Redirection prevents us from running powercfg
@@ -84,8 +27,9 @@ class disable_file_system_redirection:
 
 
 class WinPowerUsageRunner(Thread):
-    def __init__(self, args, stop_event, kill_event):
+    def __init__(self, args, start_event, stop_event, kill_event):
         Thread.__init__(self)
+        self.start_event = start_event
         self.stop_event = stop_event
         self.kill_event = kill_event
         self.powerusage = not args['no_power_usage']
@@ -98,15 +42,16 @@ class WinPowerUsageRunner(Thread):
             currtime = str(int(time.time()))
             self.start_event.wait()
 
+            self.stop_event.wait(self.poll_interval)
+            if self.stop_event.is_set():
+                continue
+
             if self.powerusage:
                 # Call powercfg.exe /SRUMUTIL   
                 command = ['powercfg.exe', '/SRUMUTIL', '/CSV', '/OUTPUT']
                 command.append(os.path.join(self.output,'srumutil' + currtime + '.csv'))
                 with disable_file_system_redirection():
-                    if isUserAdmin():
-                        subprocess.check_call(command)
-                    else:
-                        runAsAdmin(command)
+                    subprocess.check_call(command)
 
             if self.batteryusage:
                 # Call powercfg.exe /BATTERYREPORT
@@ -115,12 +60,13 @@ class WinPowerUsageRunner(Thread):
                 with disable_file_system_redirection():
                     subprocess.check_call(command)
 
-            self.stop_event.wait(self.poll_interval)
-
 
 class WinPowerUsage(object):
-    def __init__(self, output):
+    def __init__(self, topdir, output):
+        self.topdir = topdir
         self.output = output
+        self.current_analysis = None
+        self.config = {}
 
         # The stop event is for waiting 60 seconds,
         # having an event lets us end the sleep.
@@ -145,27 +91,46 @@ class WinPowerUsage(object):
         )
         self.runner.start()
 
+    def log_start(self):
+        self.config[self.current_analysis + 'starttime'] = time.time() - 3600*5
+
+    def log_stop(self):
+        self.config[self.current_analysis + 'endtime'] = time.time() - 3600*5
+
     def stop(self):
         # Stops gathering data
+        self.log_stop()
         self.start_event.clear()
         self.stop_event.set()
 
-    def start(self):
+    def baseline_start(self):
         # Starts gathering data
+        self.current_analysis = 'baseline'
+        self.log_start()
         self.stop_event.clear()
         self.start_event.set()
 
     def kill(self):
         # Kills the data gatherer (cannot be restarted afterwards)
+        self.log_stop()
         self.kill_event.set()
         self.stop_event.set()
         self.start_event.set()
+        with open(os.path.join(self.topdir, 'config.json'), 'w')as f:
+            json.dump(self.config, f)
 
     def wait(self, timeout):
         self.kill_event.wait(timeout)
 
-    def change_output_loc(newloc):
+    def change_output_loc(self, newloc):
         # Changing location allows us to run multiple tests
         # without having to restart the runner everytime.
-        self.output = output
-        self.runner.output = output
+        self.output = newloc
+        self.runner.output = newloc
+
+    def test_start(self):
+        self.current_analysis = 'test'
+        self.log_start()
+        self.stop_event.clear()
+        self.start_event.set()
+
