@@ -6,7 +6,7 @@ IMPORTANT: Polling interval should be no less than 1 minute, otherwise you risk 
 
 # Steps to Run
 
-IMPORTANT: This tool does not differentiate between AC and Battery testing, it is up to the user to configure this before starting the experiment. Furthermore, the tool cannot tell what applications should/shouldn't be running, it is up to you to ensure that have what you need running during baseline. There is a pause between the testing and baseline phases with the Batch script that allows you to setup the testing phase before continuing.
+IMPORTANT: This tool does not differentiate between AC and Battery testing, it is up to the user to configure this before starting the experiment. Furthermore, the tool cannot tell what applications should/shouldn't be running, it is up to you to ensure that have what you need running during baseline. There is a pause between the testing and baseline phases with the Batch script that allows you to setup the testing phase before continuing. With `WinPowerUsage`, after calling `stop()`, you can pause for as long as you need before starting the testing phase. `stop()` ends the baseline phase, and `kill()` ends the testing phase (or everything but that is not recommended).
 
 1. Clone this repository.
 1. There are a couple ways that the data can be recorded:
