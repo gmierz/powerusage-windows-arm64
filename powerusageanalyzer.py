@@ -79,7 +79,10 @@ def analysisparser():
                         help='Type of output to store, can be either `csv` or `json`.')
 
     parser.add_argument('--plot-power', action='store_true', default=False,
-                        help='Type of output to store, can be either `csv` or `json`.')
+                        help='Plots power usage over time.')
+
+    parser.add_argument('--plot-battery', action='store_true', default=False,
+                        help='Plots battery usage over time, drain rates, and the approximate linear drain rate.')
 
     return parser
 
@@ -194,33 +197,32 @@ def compare_data(baselinedir, testdir, config, args):
             first_good = i-1
             break
 
-    avg_baseline_battery = sum(deltas_base)/len(deltas_base)
-    #avg_test_battery = sum(get_battery_deltas(ord_test, timewindow=60))/len(ord_test)
-    avg_test_battery = 0
-    plt.figure()
-    plt.subplot(1,2,1)
-    plt.title("Battery capacity over time (mW vs time)")
-    plt.ylabel("mWh")
-    plt.xlabel("Seconds")
-    plt.plot(x_range, ord_baseline, label='Capacity')
-    axes = plt.gca()
-    slope = (ord_baseline[-1] - ord_baseline[0])/(x_range[-1]-x_range[0])
-    y_vals = ord_baseline[0] + slope * np.asarray(x_range)
-    plt.plot(x_range, y_vals, label='linear capacity (1)')
+    if args['plot_battery']:
+        avg_test_battery = 0
+        plt.figure()
+        plt.subplot(1,2,1)
+        plt.title("Battery capacity over time (mW vs time)")
+        plt.ylabel("mWh")
+        plt.xlabel("Seconds")
+        plt.plot(x_range, ord_baseline, label='Capacity')
+        axes = plt.gca()
+        slope = (ord_baseline[-1] - ord_baseline[0])/(x_range[-1]-x_range[0])
+        y_vals = ord_baseline[0] + slope * np.asarray(x_range)
+        plt.plot(x_range, y_vals, label='linear capacity (1)')
 
-    slope = (ord_baseline[-1] - ord_baseline[first_good])/(x_range[-1]-x_range[first_good])
-    y_vals = ord_baseline[0] + slope * np.asarray(x_range)
-    plt.plot(x_range, y_vals, label='linear capacity (2 - ignoring 0s)')
-    plt.legend()
+        slope = (ord_baseline[-1] - ord_baseline[first_good])/(x_range[-1]-x_range[first_good])
+        y_vals = ord_baseline[0] + slope * np.asarray(x_range)
+        plt.plot(x_range, y_vals, label='linear capacity (2 - ignoring 0s)')
+        plt.legend()
 
-    plt.subplot(1,2,2)
-    plt.title("Drain rate over time (mW vs time)")
-    plt.ylabel("mW")
-    plt.xlabel("Seconds")
-    plt.plot(x_range[:len(deltas_base)], deltas_base, label='drain rate')
-    plt.axhline(avg_baseline_battery, label='mean', color='red')
-    plt.legend()
-    plt.show()
+        plt.subplot(1,2,2)
+        plt.title("Drain rate over time (mW vs time)")
+        plt.ylabel("mW")
+        plt.xlabel("Seconds")
+        plt.plot(x_range[:len(deltas_base)], deltas_base, label='drain rate')
+        plt.axhline(avg_baseline_battery, label='mean', color='red')
+        plt.legend()
+        plt.show()
 
     avg_baseline_battery = abs(millijoules_to_milliwatts(
         milliwatthours_to_millijoules((ord_baseline[0] - ord_baseline[-1])),
@@ -340,10 +342,20 @@ def compare_against_baseline(args):
             args['baseline_time'] = config['baselineendtime'] - config['baselinestarttime']
             print("Baseline time in seconds: %s" % str(args['baseline_time']))
         except Exception as e:
-            print(e)
-            print("Error while trying to get start times.")
+            print("Error while trying to get baseline start times: %s" % str(e))
+            print("Assuming 10 minute length")
             config['baselinestarttime'] = config['starttime']
             args['baseline_time'] = 600
+
+    if not args['test_time']:
+        try:
+            args['test_time'] = config['teststarttime'] - config['testendtime']
+            print("Testing time in seconds: %s" % str(args['baseline_time']))
+        except Exception as e:
+            print("Error while trying to get testing times: %s" % str(e))
+            print("Assuming 10 minute length...")
+            args['test_time'] = 600
+
 
     print("Results will be stored in %s" % resultsdir)
     if not os.path.exists(resultsdir):

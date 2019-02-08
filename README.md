@@ -19,6 +19,7 @@ IMPORTANT: This tool does not differentiate between AC and Battery testing, it i
 	1. If running Raptor with this tool, you'll find the data in the `powerusage` folder in the artifact directory.
 	1. It's important to call `WinPowerUsage.kill()` when finished to store the config for a more precise analysis.
 1. I suggest moving the data off the reference hardware as soon as it's finished to free up the hardware for more tests.
+1. Be sure to have `matplotlib` and `numpy` installed - you can try obtaining them with `pip install -r requrements.txt` but it's highly likely that this will break. I suggest using the Anaconda environment to get around any errors you may have.
 1. Pass the folder to the analyzer like so (the `--data` directory must contain the baseline and testing folders along with a `config.json` file:
    ```
    		python powerusageanalyzer.py --data usagerunfrom1241987128 --compare --application "firefox" --baseline-application "firefox" --plot-power --smooth-battery --baseline-time 21600 --testing-time 600 --outputtype csv
