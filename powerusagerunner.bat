@@ -9,16 +9,16 @@ echo
 set /p DUMMY=Press ENTER to start baseline collection...
 
 :: Directory variables
-set OUTPUT_DIR=%1
+set OUTPUT_DIR=%cd%
 set TOOL_DIR=%cd%
 
 :: Baseline variables
 set BASELINEINTERVAL=60
-set MAXBASELINETIME=600
+set MAXBASELINETIME=%1
 
 :: Test variables
 set TESTINTERVAL=60
-set MAXTESTTIME=900
+set MAXTESTTIME=%2
 
 
 :: Setup directories
@@ -29,7 +29,7 @@ set USAGERUNDIR="usagerun%CURRTIME%"
 mkdir %USAGERUNDIR%
 cd %USAGERUNDIR%
 
-set STARTTIME=%CURRTIME%
+set BASELINESTARTTIME=%CURRTIME%
 
 set USAGERUNDIR=%cd%
 set BASELINEDIR="%USAGERUNDIR%\baseline"
@@ -58,6 +58,7 @@ set /a "BASELINECOUNT=%BASELINECOUNT%+%BASELINEINTERVAL%"
 if %BASELINECOUNT% LSS %MAXBASELINETIME% goto baselineloop
 echo Completed baseline collection.
 
+set BASELINEENDTIME=%CURRTIME%
 
 :: Start experiment with test collection
 echo Starting testing, press ENTER when ready.
@@ -80,9 +81,10 @@ powercfg.exe /srumutil /csv /output "srumutil%CURRTIME%.csv"
 set /a "TESTCOUNT=%TESTCOUNT%+%TESTINTERVAL%"
 
 if %TESTCOUNT% LSS %MAXTESTTIME% goto testloop
+set TESTENDTIME=%CURRTIME%
 
 cd %USAGERUNDIR%
 echo Storing start time config in %USAGERUNDIR%
-echo {"starttime": %STARTTIME%, "teststarttime": %TESTSTARTTIME%} >> config.json
+echo {"baselinestarttime": %BASELINESTARTTIME%, "baselineendtime": %BASELINEENDTIME%, "teststarttime": %TESTSTARTTIME%, "testendtime": %TESTENDTIME%} >> config.json
 
 cd %TOOL_DIR%
