@@ -24,4 +24,4 @@ IMPORTANT: Polling interval should be no less than 1 minute, otherwise you risk 
 
    Multiple applications can be observed at the same time if a list of applications is given to `--application`, or `--baseline-application`
 
-   The `--outputtype` can either be JSON or CSV - CSV has a nicer results printout in the console.
+   The `--outputtype` can either be JSON or CSV - CSV has a nicer results printout in the console. The results created in this file type are stored in a `results` folder in the given `--data` directory.
