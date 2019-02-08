@@ -14,6 +14,7 @@ IMPORTANT: This tool does not differentiate between AC and Battery testing, it i
 	1. Integrate power usage gathering tool into another process with [WinPowerUsage](https://github.com/gmierz/powerusage-windows-arm64/blob/master/windows_powerusage.py#L64-L135) from the file `windows_powerusage.py`.
 		1. An example implementation in Raptor can be found in [this bug](https://bugzilla.mozilla.org/show_bug.cgi?id=1525804)
 1. Simple experiments should be conducted using the batch file though it can still be easily done with the python version if needed.
+	1. If this is the case, be sure to use a `Windows Command Prompt` with Administrator Privileges.
 1. After running the experiments, an output directory titled `usagerunfrom*` is created and contains the results from the baseline and testing gathering stages.
 	1. If running Raptor with this tool, you'll find the data in the `powerusage` folder in the artifact directory.
 	1. It's important to call `WinPowerUsage.kill()` when finished to store the config for a more precise analysis.
