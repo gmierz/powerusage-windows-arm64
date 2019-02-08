@@ -18,6 +18,10 @@ IMPORTANT: Polling interval should be no less than 1 minute, otherwise you risk 
 1. I suggest moving the data off the reference hardware as soon as it's finished to free up the hardware for more tests.
 1. Pass the folder to the analyzer like so (the `--data` directory must contain the baseline and testing folders along with a `config.json` file:
    ```
-   		python powerusageanalyzer.py --data usagerunfrom1241987128 --compare --application "firefox" --baseline-application "firefox" --plot-power --smooth-battery --baseline-time 21600 --testing-time 600
+   		python powerusageanalyzer.py --data usagerunfrom1241987128 --compare --application "firefox" --baseline-application "firefox" --plot-power --smooth-battery --baseline-time 21600 --testing-time 600 --outputtype csv
    ```
    Testing time and baseline time can (most of the time) be found with the values stored in `config.json` and is automatically calculated. If there are issues, it can be changed with the flags in the command above. There are also `--exclude-apps` and `--exclude-baseline-apps` to ignore some applications if needed. See `powerusageanalyzer.py` for more information.
+
+   Multiple applications can be observed at the same time if a list of applications is given to `--application`, or `--baseline-application`
+
+   The `--outputtype` can either be JSON or CSV - CSV has a nicer results printout in the console.
