@@ -107,7 +107,9 @@ def open_srumutil_data(testdir, application, excluded_apps, teststarttim, dist_b
 
     header = ['timestamp'] + [x.lstrip(' ') for x in header[12:]]
     merged_data = merge_srum_rows(currdata)
-    fmt_data = convert_data_to_milliwatts(merged_data, dist_between_samples)
+    #fmt_data = convert_data_to_milliwatts(merged_data, dist_between_samples)
 
-    return header, fmt_data
+    #print(fmt_data)
+
+    return header, merged_data
 
