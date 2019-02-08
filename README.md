@@ -30,3 +30,5 @@ IMPORTANT: This tool does not differentiate between AC and Battery testing, it i
    The `--outputtype` can either be JSON or CSV - CSV has a nicer results printout in the console. The results created in this file type are stored in a `results` folder in the given `--data` directory.
 
 NOTE: For the Batch script, a `conhost.exe` process exists for it in the `powercfg /SRUMUTIL` reports - it can be ignored with the exclusion flags, but it is good to know it's there.
+
+NOTE: See [this bug](https://bugzilla.mozilla.org/show_bug.cgi?id=1522175#c3) for research that has already been performed along with a spreadsheet containing all the results.
