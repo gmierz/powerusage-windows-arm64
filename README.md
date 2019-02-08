@@ -6,6 +6,8 @@ IMPORTANT: Polling interval should be no less than 1 minute, otherwise you risk 
 
 # Steps to Run
 
+IMPORTANT: This tool does not differentiate between AC and Battery testing, it is up to the user to configure this before starting the experiment. Furthermore, the tool cannot tell what applications should/shouldn't be running, it is up to you to ensure that have what you need running during baseline. There is a pause between the testing and baseline phases with the Batch script that allows you to setup the testing phase before continuing.
+
 1. Clone this repository.
 1. There are a couple ways that the data can be recorded:
 	1. Run from `powerusagerunner.bat <BASELINETIME> <TESTINGTIME>`, where `BASELINETIME`, and `TESTINGTIME` must be given in seconds.
@@ -25,3 +27,5 @@ IMPORTANT: Polling interval should be no less than 1 minute, otherwise you risk 
    Multiple applications can be observed at the same time if a list of applications is given to `--application`, or `--baseline-application`
 
    The `--outputtype` can either be JSON or CSV - CSV has a nicer results printout in the console. The results created in this file type are stored in a `results` folder in the given `--data` directory.
+
+NOTE: For the Batch script, a `conhost.exe` process exists for it in the `powercfg /SRUMUTIL` reports - it can be ignored with the exclusion flags, but it is good to know it's there.
