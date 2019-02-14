@@ -112,6 +112,7 @@ def get_avg_consumption_rate(ordered_datalist, total_time):
 
 def get_battery_deltas(ordered_datalist, timewindow=60):
     deltas = []
+    print(timewindow)
     for i in range(len(ordered_datalist)):
         if i >= len(ordered_datalist) - 1:
             continue
@@ -154,9 +155,10 @@ def compare_data(baselinedir, testdir, config, args):
     ord_baseline_battery = get_ordered_datalist_battery(baseline_reports)
     ord_test_battery = get_ordered_datalist_battery(test_reports)
 
-    ord_baseline = [float(r[1]) for r in ord_baseline_battery]
-    ord_test = [float(r[1]) for r in ord_test_battery]
-    print(ord_baseline)
+    ord_baseline = [float(r[1][1]) for r in ord_baseline_battery]
+    ord_test = [float(r[1][1]) for r in ord_test_battery]
+    ord_baseline_pc = [float(r[1][0]) for r in ord_baseline_battery]
+    ord_test_pc = [float(r[1][0]) for r in ord_test_battery]
 
     if args['smooth_battery']:
         N = 15
@@ -171,6 +173,7 @@ def compare_data(baselinedir, testdir, config, args):
         ord_baseline = moving_aves
 
     deltas_base = get_battery_deltas(ord_baseline, timewindow=60)
+    deltas_test = get_battery_deltas(ord_test, timewindow=60)
     conv_baseline = [(x*60)/3600 for x in deltas_base]
 
     if args['smooth_battery']:
@@ -189,18 +192,40 @@ def compare_data(baselinedir, testdir, config, args):
     for i,_ in enumerate(ord_baseline):
         x_range.append(DIST_BETWEEN_SAMPLES*i)
 
-    first_good = 0
+    print(deltas_base)
+    first_good_base = 0
     for i, val in enumerate(deltas_base):
         if val == 0:
             continue
         else:
-            first_good = i-1
+            first_good_base = i-1
+            if first_good_base < 0:
+                first_good_base = 0
             break
+
+    first_good_test = 0
+    for i, val in enumerate(deltas_test):
+        if val == 0:
+            continue
+        else:
+            first_good_test = i-1
+            if first_good_test < 0:
+                first_good_test = 0
+            break
+
+    avg_baseline_battery = abs(millijoules_to_milliwatts(
+        milliwatthours_to_millijoules((ord_baseline[first_good_base] - ord_baseline[-1])),
+        args['baseline_time']
+    ))
+    avg_test_battery = abs(millijoules_to_milliwatts(
+        milliwatthours_to_millijoules((ord_test[first_good_test] - ord_test[-1])),
+        args['test_time']
+    ))
 
     if args['plot_battery']:
         avg_test_battery = 0
         plt.figure()
-        plt.subplot(1,2,1)
+        plt.subplot(1,3,1)
         plt.title("Battery capacity over time (mW vs time)")
         plt.ylabel("mWh")
         plt.xlabel("Seconds")
@@ -210,12 +235,25 @@ def compare_data(baselinedir, testdir, config, args):
         y_vals = ord_baseline[0] + slope * np.asarray(x_range)
         plt.plot(x_range, y_vals, label='linear capacity (1)')
 
-        slope = (ord_baseline[-1] - ord_baseline[first_good])/(x_range[-1]-x_range[first_good])
+        slope = (ord_baseline[-1] - ord_baseline[first_good_base])/(x_range[-1]-x_range[first_good_base])
         y_vals = ord_baseline[0] + slope * np.asarray(x_range)
         plt.plot(x_range, y_vals, label='linear capacity (2 - ignoring 0s)')
         plt.legend()
 
-        plt.subplot(1,2,2)
+        print("here")
+        print(len(ord_baseline))
+        print(len(ord_baseline_pc))
+
+        plt.subplot(1,3,2)
+        plt.title("Percent charge over time")
+        plt.xlabel("% Capacity")
+        plt.ylabel("Seconds")
+        ending = len(ord_baseline_pc)
+        if len(ord_baseline_pc) < len(x_range):
+            ending = len(x_range)
+        plt.plot(x_range[:ending], ord_baseline_pc[:ending])
+
+        plt.subplot(1,3,3)
         plt.title("Drain rate over time (mW vs time)")
         plt.ylabel("mW")
         plt.xlabel("Seconds")
@@ -223,15 +261,6 @@ def compare_data(baselinedir, testdir, config, args):
         plt.axhline(avg_baseline_battery, label='mean', color='red')
         plt.legend()
         plt.show()
-
-    avg_baseline_battery = abs(millijoules_to_milliwatts(
-        milliwatthours_to_millijoules((ord_baseline[0] - ord_baseline[-1])),
-        args['baseline_time']
-    ))
-    avg_test_battery = abs(millijoules_to_milliwatts(
-        milliwatthours_to_millijoules((ord_test[0] - ord_test[-1])),
-        args['test_time']
-    ))
 
     # Conduct power usage analysis
     ord_baseline = get_ordered_datalist_power(baselinedata)
@@ -243,7 +272,12 @@ def compare_data(baselinedir, testdir, config, args):
     ord_test = [r[1:] for r in ord_test]
 
     avg_test_consumption = get_avg_consumption_rate(ord_test, args['test_time'])
-    print(ord_test)
+    colors = [
+        'black', 'silver', 'red', 'gold',
+        'darkgreen', 'navy', 'm', 'darkmagenta',
+        'mediumslateblue', 'limegreen', 'goldenrod',
+        'maroon', 'dimgray'
+    ]
 
     if args['plot_power']:
         plt.figure()
@@ -258,13 +292,15 @@ def compare_data(baselinedir, testdir, config, args):
                 ignores.append(i)
 
         number_of_plots = len(ord_baseline) - len(ignores)
-        colormap = plt.cm.nipy_spectral #I suggest to use nipy_spectral, Set1,Paired
+        colormap = plt.cm.gnuplot
         ax1.set_color_cycle([colormap(i) for i in np.linspace(0, 1, number_of_plots)])
 
         all_entries = [x for x in zip(*ord_baseline)]
+        
+        print(all_entries)
         for i, row in enumerate(all_entries):
             if i in ignores: continue
-            plt.plot(x_range,[x/60 for x in row], label=header[i+1])
+            plt.plot(x_range,[x/60 for x in row], label=header[i+1], color=colors[i])
         plt.title("Baseline Power (mW) over time (s)")
         plt.legend()
 
@@ -280,13 +316,13 @@ def compare_data(baselinedir, testdir, config, args):
                 ignores.append(i)
 
         number_of_plots = len(ord_test) - len(ignores)
-        colormap = plt.cm.nipy_spectral #I suggest to use nipy_spectral, Set1,Paired
+        colormap = plt.cm.tab20
         ax1.set_color_cycle([colormap(i) for i in np.linspace(0, 1, number_of_plots)])
 
         all_entries = [x for x in zip(*ord_test)]
         for i, row in enumerate(all_entries):
             if i in ignores: continue
-            plt.plot(x_range,[x/60 for x in row], label=header[i+1])
+            plt.plot(x_range,[x/60 for x in row], label=header[i+1], color=colors[i])
         plt.title("Testing Power (mW) over time (s)")
         plt.legend()
         plt.show()

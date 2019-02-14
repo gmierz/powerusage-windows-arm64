@@ -7,7 +7,7 @@ def parse_battery_report(fname):
 	with open(fname, 'r') as html_file:
 		html_lines = html_file.readlines()
 
-	creationtime = int("1" + fname.split('.')[0].split('1')[-1])
+	creationtime = int(fname.split('.')[0].split('report')[-1])
 
 	reportLineFound = False
 	percentageFound = False
@@ -56,7 +56,8 @@ def open_battery_reports(datadir):
 	for file in files:
 		# Data is in mWh by default
 		data = parse_battery_report(file)
-		currdata[str(data['creationtime'])] = data['capacity']
+		currdata[str(data['creationtime'])] = (data['battery'], data['capacity'])
+	print(currdata)
 
 	return currdata
 

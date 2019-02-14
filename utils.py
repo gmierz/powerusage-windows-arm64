@@ -39,7 +39,8 @@ def milliwatthours_to_millijoules(energy_consumed):
 def get_ordered_datalist_power(datadict):
     # Data must have already been merged!
     sorted_list = []
-    for key in sorted(datadict, key=datadict.get):
+    for key in sorted(datadict):
+        print(key)
         newval = [key]
         if type(datadict[key]) not in (list,):
         	newval.append(datadict[key])
@@ -53,7 +54,7 @@ def get_ordered_datalist_power(datadict):
 def get_ordered_datalist_battery(datadict):
     # Data must have already been merged!
     sorted_list = []
-    for key in sorted(datadict, key=datadict.get):
+    for key in sorted(datadict):
         newval = [key]
         if type(datadict[key]) not in (list,):
         	newval.append(datadict[key])
@@ -61,5 +62,5 @@ def get_ordered_datalist_battery(datadict):
         	newval.extend(datadict[key])
         sorted_list.append(newval)
 
-    return sorted_list[::-1]
+    return sorted_list
 

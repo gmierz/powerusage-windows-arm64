@@ -27,7 +27,7 @@ def open_srumutil_report(fname, application, excluded_apps):
     # There's a lot of data - filter as soon as possible
     new_data = []
     for row in data:
-        i = 2
+        i = 0
         found = False
         while not found:
             try:
@@ -55,14 +55,18 @@ def open_srumutil_report(fname, application, excluded_apps):
             newval.extend(row[i:])
             new_data.append(newval)
 
-    return header, new_data
+    return header, new_data, finaltime
 
 
 def merge_srum_rows(datadict):
     merged_dict = {}
+    seen = {}
     for time, data in datadict.items():
-        merged_dict[time] = [0 for _ in range(len(data[0]))]
-        for row in data:
+        merged_dict[time] = [0 for _ in range(len(data['data'][0]))]
+        seen[time] = []
+        for row in data['data']:
+            if row in seen[time]: continue
+            seen[time].append(row)
             merged_dict[time] = [
                 merged_dict[time][i] + int(val)
                 for i, val in enumerate(row)
@@ -88,28 +92,70 @@ def get_srumutil_files(datadir):
     return files
 
 
+def fill_holes(merged_data, mintime=None, maxtime=None):
+    newdata = {}
+    if not maxtime:
+        maxtime = max(list([int(x) for x in merged_data.keys()]))
+    else:
+        if str(maxtime) not in merged_data:
+            keys = list(merged_data.keys())
+            merged_data[str(maxtime)] = [0 for _ in merged_data[keys[0]]]
+    if mintime:
+        if str(mintime) not in merged_data:
+            keys = list(merged_data.keys())
+            merged_data[str(mintime)] = [0 for _ in merged_data[keys[0]]]
+
+    for key, val in merged_data.items():
+        newdata[str(key)] = val
+        newkey = int(key) + 60
+        if str(newkey) in merged_data:
+            continue
+        if newkey > maxtime:
+            continue
+        while str(newkey) not in merged_data and newkey < maxtime:
+            newdata[str(newkey)] = [0 for _ in val]
+            newkey = newkey + 60
+
+    return newdata
+
+
 def open_srumutil_data(testdir, application, excluded_apps, teststarttim, dist_between_samples):
     files = get_srumutil_files(testdir)
 
+    mintime = 0
+    maxtime = 0
+    currtime = 0
     currdata = {}
-    for file in files:
-        header, data = open_srumutil_report(file, application, excluded_apps)
+    for i, file in enumerate(files):
+        header, data, currtime = open_srumutil_report(file, application, excluded_apps)
+        if i == 0:
+            mintime = currtime
+            maxtime = currtime
+        elif currtime < mintime:
+            mintime = currtime
+        elif currtime > maxtime:
+            maxtime = currtime
 
         for row in data:
             if str(row[2]) not in currdata:
-                currdata[str(row[2])] = []
-            currdata[str(row[2])].append([int(x.lstrip(' ')) for x in row[13:]])
-            if currdata[str(row[2])][-1][-1] > 1000000:
-                currdata[str(row[2])] = currdata[str(row[2])][:-1]
+                currdata[str(row[2])] = {
+                    'data': [],
+                    'file': file
+                }
+            if currdata[str(row[2])]['file'] != file:
+                continue
+            currdata[str(row[2])]['data'].append([int(x.lstrip(' ')) for x in row[13:]])
+            #if currdata[str(row[2])][-1][-1] > 1000000:
+            #    currdata[str(row[2])] = currdata[str(row[2])][:-1]
 
-    print(currdata.keys())
     print("Total datapoints found: %s" % len(list(currdata.keys())))
 
     header = ['timestamp'] + [x.lstrip(' ') for x in header[12:]]
     merged_data = merge_srum_rows(currdata)
+    filled_data = fill_holes(merged_data, mintime=mintime, maxtime=maxtime)
     #fmt_data = convert_data_to_milliwatts(merged_data, dist_between_samples)
 
     #print(fmt_data)
 
-    return header, merged_data
+    return header, filled_data
 
