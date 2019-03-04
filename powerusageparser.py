@@ -150,6 +150,9 @@ def open_srumutil_data(testdir, application, excluded_apps, teststarttim, dist_b
 
     print("Total datapoints found: %s" % len(list(currdata.keys())))
 
+    if len(list(currdata.keys())) == 0:
+        return header, currdata
+
     header = ['timestamp'] + [x.lstrip(' ') for x in header[12:]]
     merged_data = merge_srum_rows(currdata)
     filled_data = fill_holes(merged_data, mintime=mintime, maxtime=maxtime)

@@ -6,8 +6,6 @@ echo This batch script must be run from the repo directory.
 echo i.e. the current working directory must be ...\powerusage-windows-arm64
 echo 
 
-set /p DUMMY=Press ENTER to start baseline collection...
-
 :: Directory variables
 set OUTPUT_DIR=%cd%
 set TOOL_DIR=%cd%
@@ -20,13 +18,23 @@ set MAXBASELINETIME=%1
 set TESTINTERVAL=60
 set MAXTESTTIME=%2
 
+:: If testing on AC, it must be specified as the third argument
+set ACPOWER=%3
 
-:: Setup directories
 cd %OUTPUT_DIR%
 FOR /F %%I IN ('getUTime.bat') DO SET CURRTIME=%%I
 
 set USAGERUNDIR="usagerun%CURRTIME%"
 mkdir %USAGERUNDIR%
+
+if not defined ACPOWER (
+	:: Perform battery-burn pre-test (if required)
+	python.exe %TOOL_DIR%/batteryburner.py --test-dir %USAGERUNDIR%
+)
+else (
+	echo Running on AC Power, no battery drains will be detected.
+)
+
 cd %USAGERUNDIR%
 
 set BASELINESTARTTIME=%CURRTIME%
@@ -38,6 +46,12 @@ set TESTINGDIR="%USAGERUNDIR%\testing"
 mkdir %BASELINEDIR%
 mkdir %TESTINGDIR%
 
+set /p DUMMY=Press ENTER to start baseline collection...
+
+if not defined ACPOWER (
+	:: Wait for a percentage drop before starting
+	python.exe %TOOL_DIR%/batteryburner.py --test-dir %USAGERUNDIR%
+)
 
 :: Start experiment with baseline collection
 echo Collecting baseline...

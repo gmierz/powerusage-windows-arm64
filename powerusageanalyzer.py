@@ -5,6 +5,7 @@ import json
 import numpy as np
 
 from matplotlib import pyplot as plt
+from scipy.integrate import simps as integral
 
 from powerusageparser import open_srumutil_data
 from batteryusageparser import open_battery_reports
@@ -28,6 +29,12 @@ def analysisparser():
     parser.add_argument('--data', type=str, default=None,
                         help='Location of the data (must point to usagerunfrom*).')
 
+    parser.add_argument('--ignore-power', action='store_true', default=False,
+                        help="Ignore power SRUMUTIL measurements.")
+
+    parser.add_argument('--time-to-analyze', type=int, default=None,
+                        help='Amount of time to analyze.')
+
     parser.add_argument('--baseline-data', type=str, default=None,
                         help='Sets the baseline data directory. Ignored if --data is specified.')
 
@@ -47,6 +54,10 @@ def analysisparser():
     parser.add_argument('--compare', '-c', action='store_true', default=False,
                         help='If set, a standard comparison will be performed and results will be '
                               'returned as a JSON and some accompanying matplotlib figures.')
+
+    parser.add_argument('--model', '-m', action='store_true', default=False,
+                        help='If set, the battery consumption curve will be modeled '
+                              'and the output model can be used to determine drain rates for .')
 
     parser.add_argument('--application', nargs='+', required=True,
                         help='A string that represents the application we should be looking for '
@@ -84,29 +95,60 @@ def analysisparser():
     parser.add_argument('--plot-battery', action='store_true', default=False,
                         help='Plots battery usage over time, drain rates, and the approximate linear drain rate.')
 
+    parser.add_argument('--consumption-from', nargs='+', default=None,
+                        help='Only calculates power consumption from these sources (must match values from SRUMUTIL csv header).')
+
     return parser
 
 
 def display_results(results, otype):
-    if otype == 'json':
-        print(results)
-    else:
+    print()
+    for key in results:
+        print(key)
+        print(results[key])
         print()
-        for key in results:
-            print(key)
-            print(results[key])
-            print()
+
+    print("Summary of baseline results")
+    print("Battery percent-lost: %s" % str(results['battery'].split('\n')[-1].split(',')[4]))
+    print("Battery: %s mW, %s mWh" % (
+            str(results['battery'].split('\n')[-1].split(',')[0]),
+            str(results['battery'].split('\n')[-1].split(',')[2])
+        )
+    )
+    print("Power: %s mW, %s mWh" % (
+            str(results['power-base-mw'].split('\n')[-1].split(',')[-1]),
+            str(results['power-base-mwh'].split('\n')[-1].split(',')[-1])
+        )
+    )
+    print()
+
+    print("Summary of test results")
+    print("Battery percent-lost: %s" % str(results['battery'].split('\n')[-1].split(',')[5]))
+    print("Battery: %s mW, %s mWh" % (
+            str(results['battery'].split('\n')[-1].split(',')[1]),
+            str(results['battery'].split('\n')[-1].split(',')[3])
+        )
+    )
+    print("Power: %s mW, %s mWh" % (
+            str(results['power-test-mw'].split('\n')[-1].split(',')[-1]),
+            str(results['power-test-mwh'].split('\n')[-1].split(',')[-1])
+        )
+    )
+
     return
 
 
-def get_avg_consumption_rate(ordered_datalist, total_time):
+def get_avg_consumption_rate(ordered_datalist, total_time, milliwatthour=False, header=None, consumption_from=None):
     consumption = []
     for row in ordered_datalist:
         consumption.append([
-            x for x in row
+            x for i, x in enumerate(row) if (not consumption_from) or (header[i] in consumption_from)
         ])
 
-    avg_consumption = [sum(x)/total_time for x in zip(*consumption)]
+    if milliwatthour:
+        avg_consumption = [sum(x)/3600 for x in zip(*consumption)]
+    else:
+        avg_consumption = [sum(x)/total_time for x in zip(*consumption)]
     return avg_consumption
 
 
@@ -160,23 +202,56 @@ def compare_data(baselinedir, testdir, config, args):
     ord_baseline_pc = [float(r[1][0]) for r in ord_baseline_battery]
     ord_test_pc = [float(r[1][0]) for r in ord_test_battery]
 
+    x_range = []
+    for i,_ in enumerate(ord_baseline):
+        x_range.append(DIST_BETWEEN_SAMPLES*i)
+
     if args['smooth_battery']:
-        N = 15
+        N = 20
         cumsum, moving_aves = [0], []
 
         for i, x in enumerate(ord_baseline, 1):
             cumsum.append(cumsum[i-1] + x)
             if i>=N:
                 moving_ave = (cumsum[i] - cumsum[i-N])/N
-                #can do stuff with moving_ave here
                 moving_aves.append(moving_ave)
+        orig_ord_baseline = ord_baseline
         ord_baseline = moving_aves
+        cumsum = [0,0]
+        for i, x in enumerate(ord_baseline, 1):
+            if i == 1:
+                continue
+            cumsum.append(cumsum[i-1] + abs(x - ord_baseline[i-2]))
+        plt.figure()
+        plt.plot(cumsum)
+        plt.show()
+
+        plt.figure()
+
+        z = np.polyfit(x_range[:len(ord_baseline)], ord_baseline, 20)
+        f = np.poly1d(z)
+
+        print("Polynomial:")
+        print(z)
+
+        # calculate new x's and y's
+        x_new = np.linspace(x_range[0], list(x_range[:len(ord_baseline)])[-1], 50)
+        y_new = f(x_new)
+
+        plt.plot(x_new, y_new, label='Model')
+        plt.plot(x_range[:len(ord_baseline)], ord_baseline, label='Smoothed Original')
+        plt.plot(x_range, orig_ord_baseline, label='Original')
+        plt.legend()
+        plt.show()
+        ord_baseline = orig_ord_baseline
+        smoothed_baseline = moving_aves
 
     deltas_base = get_battery_deltas(ord_baseline, timewindow=60)
+    deltas_base_accel = get_battery_deltas(deltas_base, timewindow=60)
     deltas_test = get_battery_deltas(ord_test, timewindow=60)
     conv_baseline = [(x*60)/3600 for x in deltas_base]
 
-    if args['smooth_battery']:
+    if False: #args['smooth_battery']:
         N = 15
         cumsum, moving_aves = [0], []
 
@@ -188,77 +263,148 @@ def compare_data(baselinedir, testdir, config, args):
                 moving_aves.append(moving_ave)
         deltas_base = moving_aves
 
-    x_range = []
-    for i,_ in enumerate(ord_baseline):
-        x_range.append(DIST_BETWEEN_SAMPLES*i)
-
-    print(deltas_base)
+    found_decrease = 0
     first_good_base = 0
     for i, val in enumerate(deltas_base):
-        if val == 0:
+        if val <= 0:
             continue
         else:
-            first_good_base = i-1
+            first_good_base = i
             if first_good_base < 0:
                 first_good_base = 0
             break
 
+    def cut_time_out(data, start_ind=0, time_to_analyze=None, interval=60):
+        if not time_to_analyze:
+            return data
+
+        newdata = data[:start_ind]
+        currtime = 0
+        for val in data[start_ind:]:
+            if currtime >= time_to_analyze:
+                break
+            newdata.append(val)
+            currtime += interval
+
+        return newdata
+
+
+    if args['time_to_analyze']:
+        deltas_base = cut_time_out(
+            deltas_base, start_ind=first_good_base, time_to_analyze=args['time_to_analyze']
+        )
+        ord_baseline = cut_time_out(
+            ord_baseline, start_ind=first_good_base, time_to_analyze=args['time_to_analyze']
+        )
+
+    currmin = ord_baseline[-1]
+    final_decrease = 0
+    for i, val in enumerate(ord_baseline[::-1]):
+        if val == currmin:
+            continue
+        else:
+            final_decrease = i
+            if final_decrease > len(ord_baseline):
+                final_decrease = len(ord_baseline)
+            else:
+                final_decrease = len(ord_baseline) - final_decrease
+            break
+
+    found_decrease = 0
     first_good_test = 0
     for i, val in enumerate(deltas_test):
-        if val == 0:
+        if val <= 0:
             continue
         else:
             first_good_test = i-1
-            if first_good_test < 0:
+            if first_good_test < 0 or first_good_test >= len(deltas_test):
                 first_good_test = 0
             break
 
-    avg_baseline_battery = abs(millijoules_to_milliwatts(
-        milliwatthours_to_millijoules((ord_baseline[first_good_base] - ord_baseline[-1])),
-        args['baseline_time']
-    ))
-    avg_test_battery = abs(millijoules_to_milliwatts(
-        milliwatthours_to_millijoules((ord_test[first_good_test] - ord_test[-1])),
-        args['test_time']
-    ))
+    final_decrease_test = 0
+    for i, val in enumerate(ord_test[::-1]):
+        if val <= 0:
+            continue
+        else:
+            final_decrease_test = i-1
+            if final_decrease_test >= len(ord_test):
+                final_decrease_test = len(ord_test) - 1
+            elif final_decrease_test < 0:
+                final_decrease_test = 0
+            else:
+                final_decrease_test = len(ord_test) - final_decrease_test
+            break
+
+
+    baseline_time = x_range[final_decrease]-x_range[first_good_base+1]
+    print("Baseline measurement time for calculations: %s" % str(abs(baseline_time)))
+    avg_baseline_battery_mw = 0
+    if baseline_time > 0:
+        avg_baseline_battery_mw = abs(millijoules_to_milliwatts(
+            milliwatthours_to_millijoules((ord_baseline[first_good_base+1] - ord_baseline[final_decrease])),
+            abs(baseline_time)
+        ))
+
+    test_time = x_range[final_decrease_test]-x_range[first_good_test]
+    avg_test_battery_mw = 0
+    if test_time > 0:
+        avg_test_battery_mw = abs(millijoules_to_milliwatts(
+            milliwatthours_to_millijoules((ord_test[first_good_test] - ord_test[final_decrease_test])),
+            abs(test_time)
+        ))
+
+    avg_baseline_battery_mwh = (ord_baseline[first_good_base] - ord_baseline[-1])
+    avg_test_battery_mwh = (ord_test[first_good_test] - ord_test[-1])
+
+    if args['time_to_analyze']:
+        ord_baseline_pc = cut_time_out(ord_baseline_pc, start_ind=first_good_base, time_to_analyze=args['time_to_analyze'])
+        ord_test_pc = cut_time_out(ord_test_pc, start_ind=first_good_base, time_to_analyze=args['time_to_analyze'])
+
+    pc_lost_base = ord_baseline_pc[first_good_base] - ord_baseline_pc[-1]
+    pc_lost_test = ord_test_pc[first_good_test] - ord_test_pc[-1]
 
     if args['plot_battery']:
         avg_test_battery = 0
         plt.figure()
-        plt.subplot(1,3,1)
+        plt.subplot(1,2,1)
         plt.title("Battery capacity over time (mW vs time)")
         plt.ylabel("mWh")
         plt.xlabel("Seconds")
-        plt.plot(x_range, ord_baseline, label='Capacity')
+        plt.plot(x_range[:len(ord_baseline)], ord_baseline, label='Capacity')
         axes = plt.gca()
         slope = (ord_baseline[-1] - ord_baseline[0])/(x_range[-1]-x_range[0])
-        y_vals = ord_baseline[0] + slope * np.asarray(x_range)
-        plt.plot(x_range, y_vals, label='linear capacity (1)')
+        y_vals = ord_baseline[0] + slope * np.asarray(x_range[:len(ord_baseline)])
+        plt.plot(list(np.asarray(x_range[:len(ord_baseline)]) + x_range[first_good_base]), y_vals, label='linear capacity (1)')
 
         slope = (ord_baseline[-1] - ord_baseline[first_good_base])/(x_range[-1]-x_range[first_good_base])
-        y_vals = ord_baseline[0] + slope * np.asarray(x_range)
-        plt.plot(x_range, y_vals, label='linear capacity (2 - ignoring 0s)')
+        y_vals = ord_baseline[first_good_base] + slope * (np.asarray(x_range[:len(ord_baseline)]))
+        plt.plot(list(np.asarray(x_range[:len(ord_baseline)]) + x_range[first_good_base]), y_vals, label='linear capacity (2 - ignoring 0s)')
+
+        slope = (ord_baseline[final_decrease] - ord_baseline[first_good_base+1])/(x_range[final_decrease]-x_range[first_good_base+1])
+        y_vals = ord_baseline[first_good_base+1] + slope * (np.asarray(x_range[:len(ord_baseline)]))
+        plt.plot(list(np.asarray(x_range[:len(ord_baseline)]) + x_range[first_good_base+1]), y_vals, label='linear capacity (3 - ignoring 0s, and first drain)')
+
         plt.legend()
 
         print("here")
         print(len(ord_baseline))
         print(len(ord_baseline_pc))
-
-        plt.subplot(1,3,2)
+        '''
+        plt.subplot(1,4,2)
         plt.title("Percent charge over time")
         plt.xlabel("% Capacity")
         plt.ylabel("Seconds")
         ending = len(ord_baseline_pc)
-        if len(ord_baseline_pc) < len(x_range):
+        if len(ord_baseline_pc) > len(x_range):
             ending = len(x_range)
         plt.plot(x_range[:ending], ord_baseline_pc[:ending])
-
-        plt.subplot(1,3,3)
+        '''
+        plt.subplot(1,2,2)
         plt.title("Drain rate over time (mW vs time)")
         plt.ylabel("mW")
         plt.xlabel("Seconds")
         plt.plot(x_range[:len(deltas_base)], deltas_base, label='drain rate')
-        plt.axhline(avg_baseline_battery, label='mean', color='red')
+        plt.axhline(avg_baseline_battery_mw, label='mean', color='red')
         plt.legend()
         plt.show()
 
@@ -266,12 +412,26 @@ def compare_data(baselinedir, testdir, config, args):
     ord_baseline = get_ordered_datalist_power(baselinedata)
     ord_baseline = [r[1:] for r in ord_baseline]
 
-    avg_baseline_consumption = get_avg_consumption_rate(ord_baseline, args['baseline_time'])
+    if args['time_to_analyze']:
+        ord_baseline = cut_time_out(ord_baseline, time_to_analyze=args['time_to_analyze'])
+        args['baseline_time'] = args['time_to_analyze']
+
+    avg_baseline_consumption_mw = get_avg_consumption_rate(
+        ord_baseline, args['baseline_time'], milliwatthour=False, header=header[1:], consumption_from=args['consumption_from']
+    )
+    avg_baseline_consumption_mwh = get_avg_consumption_rate(
+        ord_baseline, args['baseline_time'], milliwatthour=True, header=header[1:], consumption_from=args['consumption_from']
+    )
 
     ord_test = get_ordered_datalist_power(testdata)
     ord_test = [r[1:] for r in ord_test]
 
-    avg_test_consumption = get_avg_consumption_rate(ord_test, args['test_time'])
+    if args['time_to_analyze']:
+        ord_test = cut_time_out(ord_test, time_to_analyze=args['time_to_analyze'])
+        args['test_time'] = args['time_to_analyze']
+
+    avg_test_consumption_mw = get_avg_consumption_rate(ord_test, args['test_time'], milliwatthour=False)
+    avg_test_consumption_mwh = get_avg_consumption_rate(ord_test, args['test_time'], milliwatthour=True)
     colors = [
         'black', 'silver', 'red', 'gold',
         'darkgreen', 'navy', 'm', 'darkmagenta',
@@ -303,6 +463,7 @@ def compare_data(baselinedir, testdir, config, args):
             plt.plot(x_range,[x/60 for x in row], label=header[i+1], color=colors[i])
         plt.title("Baseline Power (mW) over time (s)")
         plt.legend()
+        plt.xlim(0,9500)
 
         plt.figure()
         ax1 = plt.gca()
@@ -327,32 +488,37 @@ def compare_data(baselinedir, testdir, config, args):
         plt.legend()
         plt.show()
 
-    if otype == 'json':
-        return {
-            'power': {
-                'header': header[1:],
-                'avg-baseline (mW)': avg_baseline_consumption,
-                'avg-test (mW)': avg_test_consumption
-            },
-            'battery': {
-                'avg-baseline (mW)': avg_baseline_battery,
-                'avg-test (mW)': avg_test_battery
-            }
-        }
-    else:
-        powerbaseheader = ','.join(['power-baseline-' + i + '-mwh-per-s' for i in header[1:]])
-        powertestheader = ','.join(['power-testing-' + i + '-mwh-per-s' for i in header[1:]])
-        batteryheader = 'battery-baseline-mwh-per-s,battery-testing-mwh-per-s'
-        
-        powerbasecsv = powerbaseheader + '\n' + ','.join([str(x) for x in avg_baseline_consumption])
-        powertestcsv = powertestheader + '\n' + ','.join([str(x) for x in avg_test_consumption])
-        batterycsv = batteryheader + '\n' + ','.join([str(avg_baseline_battery), str(avg_test_battery)])
+    powerbaseheader_mw = ','.join(['power-baseline-' + i + '-mw' for i in header[1:]])
+    powertestheader_mw = ','.join(['power-testing-' + i + '-mw' for i in header[1:]])
 
-        return {
-            'power-base': powerbasecsv,
-            'power-test': powertestcsv,
-            'battery': batterycsv
-        }
+    powerbaseheader_mwh = ','.join(['power-baseline-' + i + '-mwh' for i in header[1:]])
+    powertestheader_mwh = ','.join(['power-testing-' + i + '-mwh' for i in header[1:]])
+
+    batteryheader = 'battery-baseline-mw,battery-testing-mw,' + \
+        'battery-baseline-mwh,battery-testing-mwh,' + \
+        'battery-baseline-%lost,battery-testing-%lost'
+
+    powerbasecsv = powerbaseheader_mw + '\n' + ','.join([str(x) for x in avg_baseline_consumption_mw])
+    powertestcsv = powertestheader_mw + '\n' + ','.join([str(x) for x in avg_test_consumption_mw])
+
+    powerbasecsv_mwh = powerbaseheader_mwh + '\n' + ','.join([str(x) for x in avg_baseline_consumption_mwh])
+    powertestcsv_mwh = powertestheader_mwh + '\n' + ','.join([str(x) for x in avg_test_consumption_mwh])
+
+    batterycsv = batteryheader + '\n' + ','.join(
+        [
+            str(avg_baseline_battery_mw), str(avg_test_battery_mw),
+            str(avg_baseline_battery_mwh), str(avg_test_battery_mwh),
+            str(pc_lost_base), str(pc_lost_test)
+        ]
+    )
+
+    return {
+        'power-base-mw': powerbasecsv,
+        'power-test-mw': powertestcsv,
+        'power-base-mwh': powerbasecsv_mwh,
+        'power-test-mwh': powertestcsv_mwh,
+        'battery': batterycsv
+    }
 
 
 def compare_against_baseline(args):
@@ -400,22 +566,14 @@ def compare_against_baseline(args):
     print("Comparing data...")
     results = compare_data(baselinedir, testdir, config, args)
 
-    if otype == 'json':
-        currtime = str(int(time.time()))
-        resultsjson = os.path.join(resultsdir, 'results' + currtime + '.json')
+    currtime = str(int(time.time()))
 
-        print("Saving results to %s..." % resultsjson)
-        with open(resultsjson, 'w') as f:
-            json.dump(results, f)
-    else:
-        currtime = str(int(time.time()))
-
-        for key in results:
-            resultscsv = os.path.join(resultsdir, str(key) + currtime + '.csv')
-            
-            print("Saving results to %s..." % resultscsv)
-            with open(resultscsv, 'w') as f:
-                f.write(results[key])
+    for key in results:
+        resultscsv = os.path.join(resultsdir, str(key) + currtime + '.csv')
+        
+        print("Saving results to %s..." % resultscsv)
+        with open(resultscsv, 'w') as f:
+            f.write(results[key])
 
     print("Displaying results...")
     display_results(results, otype)
