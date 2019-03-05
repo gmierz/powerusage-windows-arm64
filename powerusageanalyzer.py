@@ -5,7 +5,6 @@ import json
 import numpy as np
 
 from matplotlib import pyplot as plt
-from scipy.integrate import simps as integral
 
 from powerusageparser import open_srumutil_data
 from batteryusageparser import open_battery_reports
@@ -51,14 +50,6 @@ def analysisparser():
                         help='Sets the config to use (a .json). Ignored if --data is specified. '
                              'It can be found in usagerunfrom* folders.')
 
-    parser.add_argument('--compare', '-c', action='store_true', default=False,
-                        help='If set, a standard comparison will be performed and results will be '
-                              'returned as a JSON and some accompanying matplotlib figures.')
-
-    parser.add_argument('--model', '-m', action='store_true', default=False,
-                        help='If set, the battery consumption curve will be modeled '
-                              'and the output model can be used to determine drain rates for .')
-
     parser.add_argument('--application', nargs='+', required=True,
                         help='A string that represents the application we should be looking for '
                              'in the given `test` directories `srumuti*.csv` files. i.e. `firefox` '
@@ -69,22 +60,15 @@ def analysisparser():
                              'usage measurements from all listed applications. As an example, this '
                              'can be used to compare Firefox idling against Firefox displaying '
                              'a full screen video.')
+
     parser.add_argument('--exclude-baseline-apps', nargs='+', default=None,
-                        help='Same as application, but for the baseline, by default we use power '
-                             'usage measurements from all listed applications. As an example, this '
-                             'can be used to compare Firefox idling against Firefox displaying '
-                             'a full screen video.')
+                        help='Excludes listed applications from power measurements during baseline.')
+
     parser.add_argument('--exclude-test-apps', nargs='+', default=None,
-                        help='Same as application, but for the baseline, by default we use power '
-                             'usage measurements from all listed applications. As an example, this '
-                             'can be used to compare Firefox idling against Firefox displaying '
-                             'a full screen video.')
+                        help='Excludes listed applications from power measurements during test.')
 
     parser.add_argument('--output', type=str, default=os.getcwd(),
                         help='Location to store output.')
-
-    parser.add_argument('--outputtype', type=str, default='json',
-                        help='Type of output to store, can be either `csv` or `json`.')
 
     parser.add_argument('--smooth-battery', action='store_true', default=False,
                         help='Type of output to store, can be either `csv` or `json`.')
@@ -101,7 +85,7 @@ def analysisparser():
     return parser
 
 
-def display_results(results, otype):
+def display_results(results):
     print()
     for key in results:
         print(key)
@@ -154,7 +138,6 @@ def get_avg_consumption_rate(ordered_datalist, total_time, milliwatthour=False, 
 
 def get_battery_deltas(ordered_datalist, timewindow=60):
     deltas = []
-    print(timewindow)
     for i in range(len(ordered_datalist)):
         if i >= len(ordered_datalist) - 1:
             continue
@@ -165,9 +148,23 @@ def get_battery_deltas(ordered_datalist, timewindow=60):
     return deltas
 
 
+def cut_time_out(data, start_ind=0, time_to_analyze=None, interval=60):
+    if not time_to_analyze:
+        return data
+
+    newdata = data[:start_ind]
+    currtime = 0
+    for val in data[start_ind:]:
+        if currtime >= time_to_analyze:
+            break
+        newdata.append(val)
+        currtime += interval
+
+    return newdata
+
+
 def compare_data(baselinedir, testdir, config, args):
     app = args['application']
-    otype = args['outputtype']
 
     print("Getting SRUMUTIL baseline data...")
     header, baselinedata = open_srumutil_data(
@@ -215,43 +212,13 @@ def compare_data(baselinedir, testdir, config, args):
             if i>=N:
                 moving_ave = (cumsum[i] - cumsum[i-N])/N
                 moving_aves.append(moving_ave)
-        orig_ord_baseline = ord_baseline
+
         ord_baseline = moving_aves
-        cumsum = [0,0]
-        for i, x in enumerate(ord_baseline, 1):
-            if i == 1:
-                continue
-            cumsum.append(cumsum[i-1] + abs(x - ord_baseline[i-2]))
-        plt.figure()
-        plt.plot(cumsum)
-        plt.show()
-
-        plt.figure()
-
-        z = np.polyfit(x_range[:len(ord_baseline)], ord_baseline, 20)
-        f = np.poly1d(z)
-
-        print("Polynomial:")
-        print(z)
-
-        # calculate new x's and y's
-        x_new = np.linspace(x_range[0], list(x_range[:len(ord_baseline)])[-1], 50)
-        y_new = f(x_new)
-
-        plt.plot(x_new, y_new, label='Model')
-        plt.plot(x_range[:len(ord_baseline)], ord_baseline, label='Smoothed Original')
-        plt.plot(x_range, orig_ord_baseline, label='Original')
-        plt.legend()
-        plt.show()
-        ord_baseline = orig_ord_baseline
-        smoothed_baseline = moving_aves
 
     deltas_base = get_battery_deltas(ord_baseline, timewindow=60)
-    deltas_base_accel = get_battery_deltas(deltas_base, timewindow=60)
     deltas_test = get_battery_deltas(ord_test, timewindow=60)
-    conv_baseline = [(x*60)/3600 for x in deltas_base]
 
-    if False: #args['smooth_battery']:
+    if args['smooth_battery']:
         N = 15
         cumsum, moving_aves = [0], []
 
@@ -263,6 +230,7 @@ def compare_data(baselinedir, testdir, config, args):
                 moving_aves.append(moving_ave)
         deltas_base = moving_aves
 
+    # Determine baseline boundaries
     found_decrease = 0
     first_good_base = 0
     for i, val in enumerate(deltas_base):
@@ -273,21 +241,6 @@ def compare_data(baselinedir, testdir, config, args):
             if first_good_base < 0:
                 first_good_base = 0
             break
-
-    def cut_time_out(data, start_ind=0, time_to_analyze=None, interval=60):
-        if not time_to_analyze:
-            return data
-
-        newdata = data[:start_ind]
-        currtime = 0
-        for val in data[start_ind:]:
-            if currtime >= time_to_analyze:
-                break
-            newdata.append(val)
-            currtime += interval
-
-        return newdata
-
 
     if args['time_to_analyze']:
         deltas_base = cut_time_out(
@@ -307,9 +260,10 @@ def compare_data(baselinedir, testdir, config, args):
             if final_decrease > len(ord_baseline):
                 final_decrease = len(ord_baseline)
             else:
-                final_decrease = len(ord_baseline) - final_decrease
+                final_decrease_baseline = len(ord_baseline) - final_decrease
             break
 
+    # Determine test boundaries
     found_decrease = 0
     first_good_test = 0
     for i, val in enumerate(deltas_test):
@@ -321,27 +275,33 @@ def compare_data(baselinedir, testdir, config, args):
                 first_good_test = 0
             break
 
+    if args['time_to_analyze']:
+        deltas_test = cut_time_out(
+            deltas_test, start_ind=first_good_test, time_to_analyze=args['time_to_analyze']
+        )
+        ord_test = cut_time_out(
+            ord_test, start_ind=first_good_test, time_to_analyze=args['time_to_analyze']
+        )
+    
+    currmin = ord_test[-1]
     final_decrease_test = 0
     for i, val in enumerate(ord_test[::-1]):
-        if val <= 0:
+        if val == currmin:
             continue
         else:
-            final_decrease_test = i-1
-            if final_decrease_test >= len(ord_test):
-                final_decrease_test = len(ord_test) - 1
-            elif final_decrease_test < 0:
-                final_decrease_test = 0
+            final_decrease = i
+            if final_decrease > len(ord_test):
+                final_decrease = len(ord_test)
             else:
                 final_decrease_test = len(ord_test) - final_decrease_test
             break
 
 
-    baseline_time = x_range[final_decrease]-x_range[first_good_base+1]
-    print("Baseline measurement time for calculations: %s" % str(abs(baseline_time)))
+    baseline_time = x_range[final_decrease_baseline]-x_range[first_good_base+1]
     avg_baseline_battery_mw = 0
     if baseline_time > 0:
         avg_baseline_battery_mw = abs(millijoules_to_milliwatts(
-            milliwatthours_to_millijoules((ord_baseline[first_good_base+1] - ord_baseline[final_decrease])),
+            milliwatthours_to_millijoules((ord_baseline[first_good_base+1] - ord_baseline[final_decrease_baseline])),
             abs(baseline_time)
         ))
 
@@ -380,25 +340,12 @@ def compare_data(baselinedir, testdir, config, args):
         y_vals = ord_baseline[first_good_base] + slope * (np.asarray(x_range[:len(ord_baseline)]))
         plt.plot(list(np.asarray(x_range[:len(ord_baseline)]) + x_range[first_good_base]), y_vals, label='linear capacity (2 - ignoring 0s)')
 
-        slope = (ord_baseline[final_decrease] - ord_baseline[first_good_base+1])/(x_range[final_decrease]-x_range[first_good_base+1])
+        slope = (ord_baseline[final_decrease_baseline] - ord_baseline[first_good_base+1])/(x_range[final_decrease_baseline]-x_range[first_good_base+1])
         y_vals = ord_baseline[first_good_base+1] + slope * (np.asarray(x_range[:len(ord_baseline)]))
         plt.plot(list(np.asarray(x_range[:len(ord_baseline)]) + x_range[first_good_base+1]), y_vals, label='linear capacity (3 - ignoring 0s, and first drain)')
 
         plt.legend()
 
-        print("here")
-        print(len(ord_baseline))
-        print(len(ord_baseline_pc))
-        '''
-        plt.subplot(1,4,2)
-        plt.title("Percent charge over time")
-        plt.xlabel("% Capacity")
-        plt.ylabel("Seconds")
-        ending = len(ord_baseline_pc)
-        if len(ord_baseline_pc) > len(x_range):
-            ending = len(x_range)
-        plt.plot(x_range[:ending], ord_baseline_pc[:ending])
-        '''
         plt.subplot(1,2,2)
         plt.title("Drain rate over time (mW vs time)")
         plt.ylabel("mW")
@@ -456,8 +403,7 @@ def compare_data(baselinedir, testdir, config, args):
         ax1.set_color_cycle([colormap(i) for i in np.linspace(0, 1, number_of_plots)])
 
         all_entries = [x for x in zip(*ord_baseline)]
-        
-        print(all_entries)
+
         for i, row in enumerate(all_entries):
             if i in ignores: continue
             plt.plot(x_range,[x/60 for x in row], label=header[i+1], color=colors[i])
@@ -534,8 +480,6 @@ def compare_against_baseline(args):
         resultsdir = os.path.join(os.getcwd(), 'results')
         configfile = os.path.abspath(args['config_data'])
 
-    otype = args['outputtype']
-
     with open(configfile, 'r') as f:
         config = json.load(f)
 
@@ -576,7 +520,7 @@ def compare_against_baseline(args):
             f.write(results[key])
 
     print("Displaying results...")
-    display_results(results, otype)
+    display_results(results)
 
 
 def main():
@@ -584,10 +528,7 @@ def main():
     args = parser.parse_args()
     args = dict(vars(args))
 
-    if args['compare']:
-        compare_against_baseline(args)
-    else:
-        raise Exception("No analysis specified.")
+    compare_against_baseline(args)
 
 
 if __name__=="__main__":

@@ -57,7 +57,6 @@ def open_battery_reports(datadir):
 		# Data is in mWh by default
 		data = parse_battery_report(file)
 		currdata[str(data['creationtime'])] = (data['battery'], data['capacity'])
-	print(currdata)
 
 	return currdata
 

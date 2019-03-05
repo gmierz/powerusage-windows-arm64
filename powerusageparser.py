@@ -145,8 +145,6 @@ def open_srumutil_data(testdir, application, excluded_apps, teststarttim, dist_b
             if currdata[str(row[2])]['file'] != file:
                 continue
             currdata[str(row[2])]['data'].append([int(x.lstrip(' ')) for x in row[13:]])
-            #if currdata[str(row[2])][-1][-1] > 1000000:
-            #    currdata[str(row[2])] = currdata[str(row[2])][:-1]
 
     print("Total datapoints found: %s" % len(list(currdata.keys())))
 
@@ -156,9 +154,6 @@ def open_srumutil_data(testdir, application, excluded_apps, teststarttim, dist_b
     header = ['timestamp'] + [x.lstrip(' ') for x in header[12:]]
     merged_data = merge_srum_rows(currdata)
     filled_data = fill_holes(merged_data, mintime=mintime, maxtime=maxtime)
-    #fmt_data = convert_data_to_milliwatts(merged_data, dist_between_samples)
-
-    #print(fmt_data)
 
     return header, filled_data
 
