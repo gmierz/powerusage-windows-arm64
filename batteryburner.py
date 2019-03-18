@@ -62,7 +62,7 @@ class disable_file_system_redirection:
 
 def get_battery_level(test_dir):
 	# Call powercfg.exe /BATTERYREPORT
-	battery_loc = os.path.join(test_dir, 'batteryreport.html')
+	battery_loc = os.path.join(test_dir, 'batteryreport{}.html'.format(str(int(time.time()))))
 	command = ['powercfg.exe', '/BATTERYREPORT', '/OUTPUT']
 	command.append(battery_loc)
 	with disable_file_system_redirection():
@@ -82,6 +82,7 @@ def main(single_drop=False):
 	if not os.path.exists(tmpdir):
 		os.mkdir(tmpdir)
 
+	currlevel = get_battery_level(tmpdir)
 	if args['single_drop']:
 		# Drops that happen too early can skew mWh measurements
 		print("Pausing until battery drop detected...")
@@ -95,7 +96,7 @@ def main(single_drop=False):
 		sys.exit(0)
 
 	drops_todo = 2
-	currlevel = get_battery_level(tmpdir)
+
 	if currlevel['battery'] <= 98:
 		print("Battery burn not required.")
 		sys.exit(0)

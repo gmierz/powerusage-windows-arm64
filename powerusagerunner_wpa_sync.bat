@@ -30,8 +30,7 @@ mkdir %USAGERUNDIR%
 if not defined ACPOWER (
 	:: Perform battery-burn pre-test (if required)
 	python.exe %TOOL_DIR%/batteryburner.py --test-dir %USAGERUNDIR%
-)
-else (
+) else (
 	echo Running on AC Power, no battery drains will be detected.
 )
 
@@ -50,7 +49,7 @@ set /p DUMMY=Press ENTER to start baseline collection...
 
 if not defined ACPOWER (
 	:: Wait for a percentage drop before starting
-	python.exe %TOOL_DIR%/batteryburner.py --test-dir %USAGERUNDIR%
+	python.exe %TOOL_DIR%/batteryburner.py --test-dir %USAGERUNDIR% --single-drop
 )
 
 :: Start experiment with baseline collection

@@ -55,13 +55,8 @@ if not defined ACPOWER (
 :: Start experiment with baseline collection
 cd %BASELINEDIR%
 
-echo Starting WPA...
-wpr.exe -start "Power"
-wpr.exe -marker "start-baseline"
-
 echo Collecting baseline...
 set BASELINECOUNT=0
-
 
 :baselineloop
 FOR /F %%I IN ('%TOOL_DIR%\getUtime.bat') DO SET CURRTIME=%%I
@@ -78,17 +73,10 @@ echo Completed baseline collection.
 
 set BASELINEENDTIME=%CURRTIME%
 
-wpr.exe -marker "stop-baseline"
-wpr.exe -stop baseline.etl
-
 :: Start experiment with test collection
 echo Starting testing, press ENTER when ready.
 set /p DUMMY=ENTER to continue...
 cd %TESTINGDIR%
-
-echo Starting WPA...
-wpr.exe -start "Power"
-wpr.exe -marker "start-test"
 
 FOR /F %%I IN ('%TOOL_DIR%\getUtime.bat') DO SET CURRTIME=%%I
 set TESTSTARTTIME=%CURRTIME%
@@ -107,9 +95,6 @@ set /a "TESTCOUNT=%TESTCOUNT%+%TESTINTERVAL%"
 
 if %TESTCOUNT% LSS %MAXTESTTIME% goto testloop
 set TESTENDTIME=%CURRTIME%
-
-wpr.exe -marker "start-test"
-wpr.exe -stop test.etl
 
 cd %USAGERUNDIR%
 echo Storing start time config in %USAGERUNDIR%
