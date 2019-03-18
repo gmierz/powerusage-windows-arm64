@@ -20,6 +20,9 @@ def powerparser():
 	parser.add_argument('--test-dir', type=str, required=True,
 						help='Where the temp battery reports will reside for the burn test.')
 
+	parser.add_argument('--single-drop', action='store_true', default=False, 
+						help='Wait for a drop in percentage before starting the test.')
+
 	return parser
 
 
@@ -67,7 +70,7 @@ def get_battery_level(test_dir):
 	return parse_battery_report(battery_loc)
 
 
-def main():
+def main(single_drop=False):
 	parser = powerparser()
 	args = parser.parse_args()
 	args = dict(vars(args))
@@ -79,12 +82,9 @@ def main():
 	if not os.path.exists(tmpdir):
 		os.mkdir(tmpdir)
 
-	drops_todo = 2
-	currlevel = get_battery_level(tmpdir)
-	if currlevel['battery'] <= 98:
-		print("Battery burn not required.")
+	if args['single_drop']:
+		# Drops that happen too early can skew mWh measurements
 		print("Pausing until battery drop detected...")
-
 		detected = False
 		while not detected:
 			time.sleep(60)
@@ -92,7 +92,12 @@ def main():
 			if level['battery'] != currlevel['battery']:
 				print("Detected drop, starting recording.")
 				detected = True
+		sys.exit(0)
 
+	drops_todo = 2
+	currlevel = get_battery_level(tmpdir)
+	if currlevel['battery'] <= 98:
+		print("Battery burn not required.")
 		sys.exit(0)
 	else:
 		drops_todo = currlevel['battery'] - 99
@@ -128,4 +133,5 @@ def main():
 
 
 if __name__=="__main__":
+
 	main()

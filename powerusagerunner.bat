@@ -30,8 +30,7 @@ mkdir %USAGERUNDIR%
 if not defined ACPOWER (
 	:: Perform battery-burn pre-test (if required)
 	python.exe %TOOL_DIR%/batteryburner.py --test-dir %USAGERUNDIR%
-)
-else (
+) else (
 	echo Running on AC Power, no battery drains will be detected.
 )
 
@@ -50,14 +49,19 @@ set /p DUMMY=Press ENTER to start baseline collection...
 
 if not defined ACPOWER (
 	:: Wait for a percentage drop before starting
-	python.exe %TOOL_DIR%/batteryburner.py --test-dir %USAGERUNDIR%
+	python.exe %TOOL_DIR%/batteryburner.py --test-dir %USAGERUNDIR% --single-drop
 )
 
 :: Start experiment with baseline collection
-echo Collecting baseline...
 cd %BASELINEDIR%
 
+echo Starting WPA...
+wpr.exe -start "Power"
+wpr.exe -marker "start-baseline"
+
+echo Collecting baseline...
 set BASELINECOUNT=0
+
 
 :baselineloop
 FOR /F %%I IN ('%TOOL_DIR%\getUtime.bat') DO SET CURRTIME=%%I
@@ -74,10 +78,17 @@ echo Completed baseline collection.
 
 set BASELINEENDTIME=%CURRTIME%
 
+wpr.exe -marker "stop-baseline"
+wpr.exe -stop baseline.etl
+
 :: Start experiment with test collection
 echo Starting testing, press ENTER when ready.
 set /p DUMMY=ENTER to continue...
 cd %TESTINGDIR%
+
+echo Starting WPA...
+wpr.exe -start "Power"
+wpr.exe -marker "start-test"
 
 FOR /F %%I IN ('%TOOL_DIR%\getUtime.bat') DO SET CURRTIME=%%I
 set TESTSTARTTIME=%CURRTIME%
@@ -96,6 +107,9 @@ set /a "TESTCOUNT=%TESTCOUNT%+%TESTINTERVAL%"
 
 if %TESTCOUNT% LSS %MAXTESTTIME% goto testloop
 set TESTENDTIME=%CURRTIME%
+
+wpr.exe -marker "start-test"
+wpr.exe -stop test.etl
 
 cd %USAGERUNDIR%
 echo Storing start time config in %USAGERUNDIR%
