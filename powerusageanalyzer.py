@@ -3,7 +3,7 @@ import os
 import time
 import json
 
-from comparisons import compare_data, compare_wpa_to_power
+from comparisons import compare_data, compare_to_wpa
 
 
 def analysisparser():
@@ -70,10 +70,10 @@ def analysisparser():
     parser.add_argument('--consumption-from', nargs='+', default=None,
                         help='Only calculates power consumption from these sources (must match values from SRUMUTIL csv header).')
 
-    parser.add_argument('--compare-data', action='store_true', default=False,
+    parser.add_argument('--compare', action='store_true', default=False,
                         help='Compares the baseline data to the test data (defined by the folder names).')
 
-    parser.add_argument('--compare-to-wpa', type=str, default=None,
+    parser.add_argument('--compare-to-wpa', action='store_true', default=False,
                         help='Compares the data type specified by --wpa-type, to the WPA data specified with this flag.')
 
     parser.add_argument('--wpa-type', type=str, default='baseline',
@@ -170,7 +170,9 @@ def do_comparison(args):
         data = baselinedir
         if args['wpa_type'] != 'baseline':
             data = testdir
-        results = compare_to_wpa(data, args['compare_to_wpa'], config, args)
+        results = compare_to_wpa(data, config, args)
+    else:
+        raise Expection("Missing either --compare, or --compare-to-wpa in arguments.")
 
     currtime = str(int(time.time()))
 

@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt
 
 from powerusageparser import open_srumutil_data
 from batteryusageparser import open_battery_reports
+from wpaparser import get_wpa_data
 from utils import (
     get_ordered_datalist_battery,
     get_ordered_datalist_power,
@@ -147,6 +148,7 @@ def compare_data(baselinedir, testdir, config, args):
     curr_ind = 0
     all_decreases = []
     while curr_ind < len(ord_baseline):
+        final_decrease_baseline = curr_ind
         for i, val in enumerate(ord_baseline[curr_ind:], curr_ind):
             if val == currmax:
                 continue
@@ -406,5 +408,82 @@ def compare_data(baselinedir, testdir, config, args):
     }
 
 
-def compare_to_wpa(datadir, wpadir, config, args):
+def compare_to_wpa(datadir, config, args):
+    print("Getting SRUMUTIL power measurements...")
+    header, baselinedata = open_srumutil_data(
+        datadir,
+        args['baseline_application'],
+        args['exclude_baseline_apps'],
+        config['baselinestarttime'] if 'baselinestarttime' in config else 600,
+        args['baseline_time']
+    )
+
+        # Conduct power usage analysis
+    ord_baseline = get_ordered_datalist_power(baselinedata)
+    ord_baseline = [r[1:] for r in ord_baseline]
+
+    if args['time_to_analyze']:
+        ord_baseline = cut_time_out(ord_baseline, time_to_analyze=args['time_to_analyze'])
+        args['baseline_time'] = args['time_to_analyze']
+
+    avg_baseline_consumption_mw = get_avg_consumption_rate(
+        ord_baseline, args['baseline_time'], milliwatthour=False, header=header[1:], consumption_from=args['consumption_from']
+    )
+    avg_baseline_consumption_mwh = get_avg_consumption_rate(
+        ord_baseline, args['baseline_time'], milliwatthour=True, header=header[1:], consumption_from=args['consumption_from']
+    )
+
+    all_entries = [x for x in zip(*ord_baseline)]
+    all_entries_mw = []
+    for i, row in enumerate(all_entries):
+        all_entries_mw = [x/60 for x in row]
+
+    # Open WPA files
+    _, wpadata = get_wpa_data(
+        datadir, args['baseline_application'], args['exclude_baseline_apps'], args['baseline_time']
+    )
+
+    colors = [
+        'black', 'silver', 'red', 'gold',
+        'darkgreen', 'navy', 'm', 'darkmagenta',
+        'mediumslateblue', 'limegreen', 'goldenrod',
+        'maroon', 'dimgray'
+    ]
+
+    if args['plot_power']:
+        plt.figure()
+        ax1 = plt.gca()
+
+        x_range = []
+        ignores = []
+        for i, _ in enumerate(ord_baseline):
+            x_range.append(DIST_BETWEEN_SAMPLES*i)
+        for i, val in enumerate(ignores):
+            if i == 0:
+                ignores.append(i)
+
+        number_of_plots = len(ord_baseline) - len(ignores)
+        colormap = plt.cm.gnuplot
+        ax1.set_color_cycle([colormap(i) for i in np.linspace(0, 1, number_of_plots)])
+
+        all_entries = [x for x in zip(*ord_baseline)]
+
+        # TODO: Plot power usage as bars
+        for i, row in enumerate(all_entries):
+            if i in ignores: continue
+            plt.plot(x_range,[x/60 for x in row], label=header[i+1], color=colors[i])
+
+        # TODO: Average 1 minute intervals and plot them as bars
+        colors2 = ['blue', 'lightblue']
+        for i, dset in enumerate(wpadata):
+            print(dset)
+            plt.plot(wpadata[dset]['times'], wpadata[dset]['data'], label=dset, color=colors2[i])
+
+        # TODO: Correlate bar plot values
+
+        plt.title("Baseline Power (mW) over time (s)")
+        plt.legend()
+        plt.xlim(0,9500)
+        plt.show()
+
     return None
