@@ -230,7 +230,7 @@ def compare_data(baselinedir, testdir, config, args):
             if final_decrease > len(ord_test):
                 final_decrease = len(ord_test)
             else:
-                final_decrease_test = len(ord_test) - final_decrease_test
+                final_decrease_test = len(ord_test) - final_decrease
             break
 
 
